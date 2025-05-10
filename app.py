@@ -31,18 +31,24 @@ def sanitize_filename(filename):
     # Remove characters not allowed in Windows filenames
     return re.sub(r'[\\/*?:"<>|]', "", filename)
 
-def download_best_audio_as_mp3(video_url, save_path=DOWNLOAD_DIR):
+def download_best_audio_as_mp3(video_url, save_path):
     ydl_opts = {
-        'outtmpl': save_path + '/%(title)s.%(ext)s',  # Save path and file name
-        'postprocessors': [{  # Post-process to convert to MP3
+        'format': 'bestaudio/best',
+        'outtmpl': os.path.join(save_path, '%(title)s.%(ext)s'),
+        'postprocessors': [{
             'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',  # Convert to mp3
-            'preferredquality': '0',  # '0' means best quality, auto-determined by source
+            'preferredcodec': 'mp3',
+            'preferredquality': '0',
         }],
-         'ffmpeg_location': "/usr/bin/ffmpeg"
+        'ffmpeg_location': FFMPEG_DIR,
     }
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([video_url])
+        info_dict = ydl.extract_info(video_url, download=True)
+        title = info_dict.get("title", None)
+        filename = ydl.prepare_filename(info_dict)
+        mp3_filename = os.path.splitext(filename)[0] + ".mp3"
+        return mp3_filename, title
 
 def get_video_title(video_url, save_path=DOWNLOAD_DIR):
     ydl_opts = {
@@ -370,8 +376,7 @@ with st.form("get_sample_from_file"):
 
 
 if (video_link):
-    download_best_audio_as_mp3(video_link,"C:\\Users\\91865\\Desktop\\shazam app\\downloads")
-    download_dir = "C:\\Users\\91865\\Desktop\\shazam app\\downloads"
+    mp3_path, video_title = download_best_audio_as_mp3(video_link, DOWNLOAD_DIR)
     video_title = sanitize_filename(get_video_title(video_link, DOWNLOAD_DIR))
     video_file_path = os.path.join(DOWNLOAD_DIR, f"{video_title}.mp3")
 
@@ -383,7 +388,7 @@ if (video_link):
 
     fingerprinter = AudioFingerprinter(DB_PATH, MAP_PATH)
 
-    fingerprinter.add_song(video_file_path, video_title)
+    fingerprinter.add_song(mp3_path, video_title)
 
     # Save the database
     fingerprinter.save_database()
