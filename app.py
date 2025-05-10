@@ -21,6 +21,9 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 DB_PATH = os.path.join(BASE_DIR, "fingerprint_database.pkl")
 MAP_PATH = os.path.join(BASE_DIR, "song_mapping.pkl")
 
+ffmpeg_path = ffmpeg.get_executable()
+os.environ["PATH"] += os.pathsep + os.path.dirname(ffmpeg_path)
+
 # ---------------------------------------------------------------------------------------------
 
 
