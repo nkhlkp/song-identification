@@ -232,7 +232,7 @@ class AudioFingerprinter:
 
         return song_id
 
-def add_songs_from_directory(self, directory_path):
+    def add_songs_from_directory(self, directory_path):
         added_songs = []
         
         # Get all audio files in the directory
@@ -254,6 +254,7 @@ def add_songs_from_directory(self, directory_path):
         return added_songs
 
     def identify_sample(self, sample_path, threshold=0.0001):
+
         spectrogram, freqs, times = load_and_process_audio(sample_path)
         peaks = find_peaks(spectrogram, freqs, times)
         fingerprints = create_fingerprints(peaks)
