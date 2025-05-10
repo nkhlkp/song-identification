@@ -13,121 +13,44 @@ from pydub import AudioSegment
 import re
 import tempfile
 import urllib
-import subprocess
-
-subprocess.run(["pip", "install", "--upgrade", "yt-dlp"])
+from urllib.parse import urlparse, parse_qs
 
 # Create necessary directories
 DOWNLOADS_DIR = "downloads"
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
-for filename in os.listdir(DOWNLOADS_DIR):
-    file_path = os.path.join(DOWNLOADS_DIR, filename)
-    if os.path.isfile(file_path) or os.path.islink(file_path):
-        os.remove(file_path)
-        print(f"{filename} is removed")
-
 # ---------------------------------------------------------------------------------------------
-def download_with_pytube(video_url, save_path=DOWNLOADS_DIR):
-    try:
-        from pytube import YouTube
-        
-        yt = YouTube(video_url)
-        audio_stream = yt.streams.filter(only_audio=True).first()
-        
-        # Download to a temporary file
-        temp_file = audio_stream.download(output_path=save_path)
-        
-        # Convert to mp3 using ffmpeg
-        base, _ = os.path.splitext(temp_file)
-        mp3_file = f"{base}.mp3"
-        
-        import subprocess
-        subprocess.run([
-            'ffmpeg', '-i', temp_file, 
-            '-vn', '-ar', '44100', '-ac', '2', '-b:a', '192k', 
-            mp3_file
-        ], check=True)
-        
-        # Remove the temporary file
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-            
-        return mp3_file
-    except Exception as e:
-        st.error(f"Pytube fallback failed: {str(e)}")
+
+def clean_youtube_url(url):
+    parsed_url = urlparse(url)
+    if 'youtu.be' in parsed_url.netloc:
+        # Shortened URL format: https://youtu.be/VIDEO_ID
+        video_id = parsed_url.path[1:]
+    elif 'youtube.com' in parsed_url.netloc:
+        # Standard URL format: https://www.youtube.com/watch?v=VIDEO_ID
+        query_params = parse_qs(parsed_url.query)
+        video_id = query_params.get('v', [None])[0]
+    else:
+        return None  # Not a YouTube URL
+
+    if video_id:
+        return f"https://www.youtube.com/watch?v={video_id}"
+    else:
         return None
+    
 
 def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
-    # Clear the cache first (helps with 403 errors)
-    try:
-        import subprocess
-        subprocess.run(["yt-dlp", "--rm-cache-dir"], check=False)
-    except Exception as e:
-        st.warning(f"Could not clear cache: {e}")
-    
-    # Set up options with multiple fixes for 403 errors
     ydl_opts = {
-        'format': 'bestaudio/best',
         'outtmpl': os.path.join(save_path, '%(title)s.%(ext)s'),
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '0',
         }],
-        # Add user agent (helps bypass some restrictions)
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        # Force IPv4 (recent fix for 403 errors)
-        'force_ipv4': True,
-        # Add verbose output for debugging
-        'verbose': True,
-        # Add cookies (optional, can help with some restrictions)
-        # 'cookiefile': 'cookies.txt',
-        # Add referer (can help with some restrictions)
-        'referer': 'https://www.youtube.com/',
-        # Retry on HTTP errors
-        'retries': 10,
-        # Sleep between retries
-        'sleep_interval': 5,
     }
-    
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            video_title = info.get('title', 'unknown_title')
-            expected_path = os.path.join(save_path, f"{video_title}.mp3")
-            return expected_path
-    except Exception as e:
-        st.error(f"First attempt failed: {e}")
-        
-        # Try with IPv6 if IPv4 failed
-        ydl_opts['force_ipv4'] = False
-        ydl_opts['force_ipv6'] = True
-        
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(video_url, download=True)
-                video_title = info.get('title', 'unknown_title')
-                expected_path = os.path.join(save_path, f"{video_title}.mp3")
-                return expected_path
-        except Exception as e2:
-            st.error(f"Second attempt failed: {e2}")
-            
-            # Try with specific format as last resort
-            ydl_opts['force_ipv6'] = False
-            ydl_opts['format'] = '140'  # Common audio format on YouTube
-            
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(video_url, download=True)
-                    video_title = info.get('title', 'unknown_title')
-                    expected_path = os.path.join(save_path, f"{video_title}.mp3")
-                    return expected_path
-            except Exception as e:
-                st.warning(f"yt-dlp failed: {str(e)}. Trying alternative method...")
-        
-    # If yt-dlp failed, try pytube
-    return download_with_pytube(video_url, save_path)
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([video_url])
+
 
 def get_video_title(video_url, save_path=DOWNLOADS_DIR):
     ydl_opts = {
@@ -407,10 +330,11 @@ if st.button("Load existing songs"):
 # YouTube URL form
 with st.form("get_link"):
     video_link = st.text_input("Enter the YouTube URL of the song:")
+    clean_link = clean_youtube_url(video_link)
     submitted = st.form_submit_button("Upload Song")
-    if submitted and video_link:
-        download_best_audio_as_mp3(video_link, DOWNLOADS_DIR)
-        video_title = get_video_title(video_link, DOWNLOADS_DIR)
+    if submitted and clean_link:
+        download_best_audio_as_mp3(clean_link, DOWNLOADS_DIR)
+        video_title = get_video_title(clean_link, DOWNLOADS_DIR)
         video_file_path = os.path.join(DOWNLOADS_DIR, f"{video_title}.mp3")
         
         if os.path.exists(video_file_path):
