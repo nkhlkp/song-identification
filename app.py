@@ -21,6 +21,12 @@ subprocess.run(["pip", "install", "--upgrade", "yt-dlp"])
 DOWNLOADS_DIR = "downloads"
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
+for filename in os.listdir(DOWNLOADS_DIR):
+    file_path = os.path.join(DOWNLOADS_DIR, filename)
+    if os.path.isfile(file_path) or os.path.islink(file_path):
+        os.remove(file_path)
+        print(f"{filename} is removed")
+
 # ---------------------------------------------------------------------------------------------
 def download_with_pytube(video_url, save_path=DOWNLOADS_DIR):
     try:
