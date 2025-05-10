@@ -21,8 +21,8 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 DB_PATH = os.path.join(BASE_DIR, "fingerprint_database.pkl")
 MAP_PATH = os.path.join(BASE_DIR, "song_mapping.pkl")
 
-ffmpeg_path = ffmpeg.get_executable()
-os.environ["PATH"] += os.pathsep + os.path.dirname(ffmpeg_path)
+ffmpeg_path = os.path.join(os.path.dirname(__file__), "bin")
+os.environ["PATH"] += os.pathsep + ffmpeg_path
 
 # ---------------------------------------------------------------------------------------------
 
@@ -33,6 +33,7 @@ def sanitize_filename(filename):
 
 def download_best_audio_as_mp3(video_url, save_path=DOWNLOAD_DIR):
     ydl_opts = {
+        'ffmpeg_location': ffmpeg_path,  # Explicitly tell yt-dlp where to find ffmpeg
         'outtmpl': save_path + '/%(title)s.%(ext)s',  # Save path and file name
         'postprocessors': [{  # Post-process to convert to MP3
             'key': 'FFmpegExtractAudio',
