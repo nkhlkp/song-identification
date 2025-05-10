@@ -43,7 +43,6 @@ def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
             video_title = info.get('title', 'unknown_title')
-            sanitized_title = sanitize_filename(video_title)
             
             # Try with different format selection
             ydl_opts['format'] = 'bestaudio'
@@ -51,7 +50,7 @@ def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
             ydl.download([video_url])
             
             # Check if file exists and has content
-            expected_path = os.path.join(save_path, f"{sanitized_title}.mp3")
+            expected_path = os.path.join(save_path, f"{video_title}.mp3")
             if os.path.exists(expected_path) and os.path.getsize(expected_path) > 0:
                 return expected_path
             
