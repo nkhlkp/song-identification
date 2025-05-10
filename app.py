@@ -22,7 +22,35 @@ DOWNLOADS_DIR = "downloads"
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
 # ---------------------------------------------------------------------------------------------
-
+def download_with_pytube(video_url, save_path=DOWNLOADS_DIR):
+    try:
+        from pytube import YouTube
+        
+        yt = YouTube(video_url)
+        audio_stream = yt.streams.filter(only_audio=True).first()
+        
+        # Download to a temporary file
+        temp_file = audio_stream.download(output_path=save_path)
+        
+        # Convert to mp3 using ffmpeg
+        base, _ = os.path.splitext(temp_file)
+        mp3_file = f"{base}.mp3"
+        
+        import subprocess
+        subprocess.run([
+            'ffmpeg', '-i', temp_file, 
+            '-vn', '-ar', '44100', '-ac', '2', '-b:a', '192k', 
+            mp3_file
+        ], check=True)
+        
+        # Remove the temporary file
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+            
+        return mp3_file
+    except Exception as e:
+        st.error(f"Pytube fallback failed: {str(e)}")
+        return None
 
 def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
     # Clear the cache first (helps with 403 errors)
@@ -89,9 +117,11 @@ def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
                     video_title = info.get('title', 'unknown_title')
                     expected_path = os.path.join(save_path, f"{video_title}.mp3")
                     return expected_path
-            except Exception as e3:
-                st.error(f"All download attempts failed. Last error: {e3}")
-                return None
+            except Exception as e:
+                st.warning(f"yt-dlp failed: {str(e)}. Trying alternative method...")
+        
+    # If yt-dlp failed, try pytube
+    return download_with_pytube(video_url, save_path)
 
 def get_video_title(video_url, save_path=DOWNLOADS_DIR):
     ydl_opts = {
