@@ -25,7 +25,14 @@ os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
 
 def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
-    # First attempt: Standard download
+    # Clear the cache first (helps with 403 errors)
+    try:
+        import subprocess
+        subprocess.run(["yt-dlp", "--rm-cache-dir"], check=False)
+    except Exception as e:
+        st.warning(f"Could not clear cache: {e}")
+    
+    # Set up options with multiple fixes for 403 errors
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': os.path.join(save_path, '%(title)s.%(ext)s'),
@@ -34,49 +41,57 @@ def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
             'preferredcodec': 'mp3',
             'preferredquality': '0',
         }],
-        'verbose': True,  # Add verbose output for debugging
-        'no_warnings': False,
-        'ignoreerrors': False,
+        # Add user agent (helps bypass some restrictions)
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        # Force IPv4 (recent fix for 403 errors)
+        'force_ipv4': True,
+        # Add verbose output for debugging
+        'verbose': True,
+        # Add cookies (optional, can help with some restrictions)
+        # 'cookiefile': 'cookies.txt',
+        # Add referer (can help with some restrictions)
+        'referer': 'https://www.youtube.com/',
+        # Retry on HTTP errors
+        'retries': 10,
+        # Sleep between retries
+        'sleep_interval': 5,
     }
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=False)
+            info = ydl.extract_info(video_url, download=True)
             video_title = info.get('title', 'unknown_title')
-            
-            # Try with different format selection
-            ydl_opts['format'] = 'bestaudio'
-            ydl.params = ydl_opts  # Update params
-            ydl.download([video_url])
-            
-            # Check if file exists and has content
             expected_path = os.path.join(save_path, f"{video_title}.mp3")
-            if os.path.exists(expected_path) and os.path.getsize(expected_path) > 0:
-                return expected_path
-            
-            # If we're here, the first attempt failed
-            st.warning("First download attempt failed. Trying alternative method...")
-            
-            # Second attempt: Use a different format approach
-            ydl_opts['format'] = 'bestaudio[ext=m4a]'
-            ydl.params = ydl_opts
-            ydl.download([video_url])
-            
-            # Check again
-            if os.path.exists(expected_path) and os.path.getsize(expected_path) > 0:
-                return expected_path
-                
-            # Third attempt: Try with a specific format
-            ydl_opts['format'] = '140'  # Common audio format on YouTube
-            ydl.params = ydl_opts
-            ydl.download([video_url])
-            
             return expected_path
-            
     except Exception as e:
-        st.error(f"Error downloading: {str(e)}")
-        return None
-
+        st.error(f"First attempt failed: {e}")
+        
+        # Try with IPv6 if IPv4 failed
+        ydl_opts['force_ipv4'] = False
+        ydl_opts['force_ipv6'] = True
+        
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=True)
+                video_title = info.get('title', 'unknown_title')
+                expected_path = os.path.join(save_path, f"{video_title}.mp3")
+                return expected_path
+        except Exception as e2:
+            st.error(f"Second attempt failed: {e2}")
+            
+            # Try with specific format as last resort
+            ydl_opts['force_ipv6'] = False
+            ydl_opts['format'] = '140'  # Common audio format on YouTube
+            
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(video_url, download=True)
+                    video_title = info.get('title', 'unknown_title')
+                    expected_path = os.path.join(save_path, f"{video_title}.mp3")
+                    return expected_path
+            except Exception as e3:
+                st.error(f"All download attempts failed. Last error: {e3}")
+                return None
 
 def get_video_title(video_url, save_path=DOWNLOADS_DIR):
     ydl_opts = {
