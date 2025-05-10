@@ -39,11 +39,6 @@ def clean_youtube_url(url):
         return None
     
 
-def sanitize_filename(filename):
-    # Remove characters not allowed in filenames
-    return re.sub(r'[\\/*?:"<>|]', "", filename)
-
-
 def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
     ydl_opts = {
         'outtmpl': os.path.join(save_path, '%(title)s.%(ext)s'),
@@ -339,8 +334,7 @@ with st.form("get_link"):
     submitted = st.form_submit_button("Upload Song")
     if submitted and clean_link:
         download_best_audio_as_mp3(clean_link, DOWNLOADS_DIR)
-        raw_title = get_video_title(clean_link, DOWNLOADS_DIR)
-        video_title = sanitize_filename(raw_title)
+        video_title = get_video_title(clean_link, DOWNLOADS_DIR)
         video_file_path = os.path.join(DOWNLOADS_DIR, f"{video_title}.mp3")
         
         if os.path.exists(video_file_path):
