@@ -13,7 +13,6 @@ from pydub import AudioSegment
 import re
 import tempfile
 import urllib
-from urllib.parse import urlparse, parse_qs
 
 # Create necessary directories
 DOWNLOADS_DIR = "downloads"
@@ -21,23 +20,6 @@ os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
 # ---------------------------------------------------------------------------------------------
 
-def clean_youtube_url(url):
-    parsed_url = urlparse(url)
-    if 'youtu.be' in parsed_url.netloc:
-        # Shortened URL format: https://youtu.be/VIDEO_ID
-        video_id = parsed_url.path[1:]
-    elif 'youtube.com' in parsed_url.netloc:
-        # Standard URL format: https://www.youtube.com/watch?v=VIDEO_ID
-        query_params = parse_qs(parsed_url.query)
-        video_id = query_params.get('v', [None])[0]
-    else:
-        return None  # Not a YouTube URL
-
-    if video_id:
-        return f"https://www.youtube.com/watch?v={video_id}"
-    else:
-        return None
-    
 
 def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
     ydl_opts = {
@@ -330,11 +312,10 @@ if st.button("Load existing songs"):
 # YouTube URL form
 with st.form("get_link"):
     video_link = st.text_input("Enter the YouTube URL of the song:")
-    clean_link = clean_youtube_url(video_link)
     submitted = st.form_submit_button("Upload Song")
-    if submitted and clean_link:
-        download_best_audio_as_mp3(clean_link, DOWNLOADS_DIR)
-        video_title = get_video_title(clean_link, DOWNLOADS_DIR)
+    if submitted and video_link:
+        download_best_audio_as_mp3(video_link, DOWNLOADS_DIR)
+        video_title = get_video_title(video_link, DOWNLOADS_DIR)
         video_file_path = os.path.join(DOWNLOADS_DIR, f"{video_title}.mp3")
         
         if os.path.exists(video_file_path):
