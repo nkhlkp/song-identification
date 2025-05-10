@@ -13,6 +13,9 @@ from pydub import AudioSegment
 import re
 import tempfile
 import urllib
+import subprocess
+
+subprocess.run(["pip", "install", "--upgrade", "yt-dlp"])
 
 # Create necessary directories
 DOWNLOADS_DIR = "downloads"
