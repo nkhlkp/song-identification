@@ -13,14 +13,21 @@ from os import path
 from pydub import AudioSegment
 import re
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+DB_PATH = os.path.join(BASE_DIR, "fingerprint_database.pkl")
+MAP_PATH = os.path.join(BASE_DIR, "song_mapping.pkl")
 
 # ---------------------------------------------------------------------------------------------
+
 
 def sanitize_filename(filename):
     # Remove characters not allowed in Windows filenames
     return re.sub(r'[\\/*?:"<>|]', "", filename)
 
-def download_best_audio_as_mp3(video_url, save_path="C:\\Users\\91865\\Desktop\\shazam app\\downloads"):
+def download_best_audio_as_mp3(video_url, save_path=DOWNLOAD_DIR):
     ydl_opts = {
         'outtmpl': save_path + '/%(title)s.%(ext)s',  # Save path and file name
         'postprocessors': [{  # Post-process to convert to MP3
@@ -32,7 +39,7 @@ def download_best_audio_as_mp3(video_url, save_path="C:\\Users\\91865\\Desktop\\
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([video_url])
 
-def get_video_title(video_url, save_path="C:\\Users\\91865\\Desktop\\shazam app\\downloads"):
+def get_video_title(video_url, save_path=DOWNLOAD_DIR):
     ydl_opts = {
     'outtmpl': save_path + '/%(title)s.%(ext)s',  # Save path and file name
     'postprocessors': [{  # Post-process to convert to MP3
@@ -316,7 +323,7 @@ if st.button("Load existing songs"):
     fingerprinter = AudioFingerprinter()
 
     # Add all songs from the downloads directory
-    fingerprinter.add_songs_from_directory("C:\\Users\\91865\\Desktop\\shazam app\\downloads")
+    fingerprinter.add_songs_from_directory(DOWNLOAD_DIR)
 
     # Save the database
     fingerprinter.save_database()
@@ -360,16 +367,17 @@ with st.form("get_sample_from_file"):
 if (video_link):
     download_best_audio_as_mp3(video_link,"C:\\Users\\91865\\Desktop\\shazam app\\downloads")
     download_dir = "C:\\Users\\91865\\Desktop\\shazam app\\downloads"
-    raw_title = get_video_title(video_link, download_dir)
-    video_title = sanitize_filename(raw_title)
-    video_file_path = os.path.join(download_dir, f"{video_title}.mp3")
+    video_title = sanitize_filename(get_video_title(video_link, DOWNLOAD_DIR))
+    video_file_path = os.path.join(DOWNLOAD_DIR, f"{video_title}.mp3")
 
     st.write(f"Processing file: {video_file_path}")
     if not os.path.exists(video_file_path):
         st.error("MP3 file not found. Check the file path or name.")
 
     # Add the song to the fingerprint database
-    fingerprinter = AudioFingerprinter("fingerprint_database.pkl", "song_mapping.pkl")
+
+    fingerprinter = AudioFingerprinter(DB_PATH, MAP_PATH)
+
     fingerprinter.add_song(video_file_path, video_title)
 
     # Save the database
@@ -392,12 +400,12 @@ if sample_recorded_audio:
         sound.export(output_file, format="mp3")
 
         # Send the sample for matching
-        fingerprinter = AudioFingerprinter("fingerprint_database.pkl", "song_mapping.pkl")
+        fingerprinter = AudioFingerprinter(DB_PATH, MAP_PATH)
         results = fingerprinter.identify_sample(output_file)
 
 
 if sample_uploaded_audio:
 
     # Send the sample for matching
-    fingerprinter = AudioFingerprinter("fingerprint_database.pkl", "song_mapping.pkl")
+    fingerprinter = AudioFingerprinter(DB_PATH, MAP_PATH)
     results = fingerprinter.identify_sample(sample_uploaded_audio)
