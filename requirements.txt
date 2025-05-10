@@ -6,4 +6,3 @@ scipy
 matplotlib
 soundfile
 pydub
-urllib
