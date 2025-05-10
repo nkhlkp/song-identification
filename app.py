@@ -22,6 +22,9 @@ from pytubefix.cli import on_progress
 DOWNLOADS_DIR = "downloads"
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
+os.environ['http_proxy'] = "139.59.1.14:90"
+os.environ['https_proxy'] = "139.59.1.14:90"
+
 # ---------------------------------------------------------------------------------------------
 
 # Downloading the YouTube video as a m4a file
