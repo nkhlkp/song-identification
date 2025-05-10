@@ -6,217 +6,46 @@ from scipy.ndimage import maximum_filter, generate_binary_structure, iterate_str
 import matplotlib.pyplot as plt
 import librosa
 import os
-import sys
-import subprocess
 from collections import defaultdict, Counter
 import pickle
-import re
+import sys
 from pydub import AudioSegment
+import re
 import tempfile
+import pytubefix
+from pytubefix import YouTube
+from pytubefix.cli import on_progress
+
+# ---------------------------------------------------------------------------------------------
 
 # Create necessary directories
 DOWNLOADS_DIR = "downloads"
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
 # ---------------------------------------------------------------------------------------------
-def sanitize_filename(filename):
-    # Remove characters not allowed in filenames
-    return re.sub(r'[\\/*?:"<>|]', "", filename)
 
-def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
-    # Clear the cache first (helps with 403 errors)
-    try:
-        subprocess.run(["yt-dlp", "--rm-cache-dir"], check=False)
-    except Exception as e:
-        st.warning(f"Could not clear cache: {e}")
-    
-    # Set up options with multiple fixes for 403 errors
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': os.path.join(save_path, '%(title)s.%(ext)s'),
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '0',
-        }],
-        # Add user agent (helps bypass some restrictions)
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        # Force IPv4 (recent fix for 403 errors)
-        'force_ipv4': True,
-        # Add verbose output for debugging
-        'verbose': True,
-        # Add referer (can help with some restrictions)
-        'referer': 'https://www.youtube.com/',
-        # Retry on HTTP errors
-        'retries': 10,
-        # Sleep between retries
-        'sleep_interval': 5,
-    }
-    
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            video_title = info.get('title', 'unknown_title')
-            sanitized_title = sanitize_filename(video_title)
-            expected_path = os.path.join(save_path, f"{sanitized_title}.mp3")
-            return expected_path
-    except Exception as e:
-        st.error(f"First attempt failed: {e}")
-        
-        # Try with IPv6 if IPv4 failed
-        ydl_opts['force_ipv4'] = False
-        ydl_opts['force_ipv6'] = True
-        
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(video_url, download=True)
-                video_title = info.get('title', 'unknown_title')
-                sanitized_title = sanitize_filename(video_title)
-                expected_path = os.path.join(save_path, f"{sanitized_title}.mp3")
-                return expected_path
-        except Exception as e2:
-            st.error(f"Second attempt failed: {e2}")
-            
-            # Try with specific format as last resort
-            ydl_opts['force_ipv6'] = False
-            ydl_opts['format'] = '140'  # Common audio format on YouTube
-            
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(video_url, download=True)
-                    video_title = info.get('title', 'unknown_title')
-                    sanitized_title = sanitize_filename(video_title)
-                    expected_path = os.path.join(save_path, f"{sanitized_title}.mp3")
-                    return expected_path
-            except Exception as e3:
-                st.error(f"All download attempts failed. Last error: {e3}")
-                return None
+# Downloading the YouTube video as a m4a file
+def download_mp3(url):
+    yt = YouTube(url, on_progress_callback=on_progress)
+    video_title = yt.title
+    audio = itags(yt, '1080p') # specify the resolution    
+    yt.streams.get_by_itag(audio).download(output_path=DOWNLOADS_DIR) # downloads audio
+    return video_title
 
-def get_video_title(video_url, save_path=DOWNLOADS_DIR):
-    ydl_opts = {
-        'outtmpl': os.path.join(save_path, '%(title)s.%(ext)s'),
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '0',
-        }],
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info_dict = ydl.extract_info(video_url, download=False)
-        video_title = info_dict.get('title', None)
-        return video_title
+def itags(yt, resolution='1080p'):
+    max_audio = 0
+    audio_value = 0
+    for audio_stream in yt.streams.filter(only_audio=True):
+        abr = int(audio_stream.abr.replace('kbps', ''))
+        if abr > max_audio:
+            max_audio = abr
+            audio_value = audio_stream.itag
+    streams = yt.streams
+    return audio_value
 
-# SpotDL Integration
-def install_spotdl_if_needed():
-    """Check if spotdl is installed and install if needed"""
-    try:
-        subprocess.run(["spotdl", "--version"], capture_output=True, check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        st.info("Installing spotDL (this may take a moment)...")
-        try:
-            subprocess.run([sys.executable, "-m", "pip", "install", "spotdl"], check=True)
-            # Also install ffmpeg if needed
-            subprocess.run(["spotdl", "--download-ffmpeg"], check=True)
-            return True
-        except Exception as e:
-            st.error(f"Failed to install spotDL: {e}")
-            return False
 
-def download_from_spotify(spotify_url, save_path=DOWNLOADS_DIR):
-    """Download a song from Spotify and return the path to the downloaded file"""
-    
-    if not install_spotdl_if_needed():
-        return None
-        
-    try:
-        # Create a temporary file to capture the output
-        with tempfile.NamedTemporaryFile(suffix='.txt', delete=False) as tmp:
-            tmp_path = tmp.name
-            
-        # Run spotdl with the Spotify URL
-        process = subprocess.run(
-            ["spotdl", "download", spotify_url, "--output", save_path, "--output-format", "mp3"],
-            capture_output=True,
-            text=True,
-            check=False  # Don't raise exception on non-zero exit
-        )
-        
-        if process.returncode != 0:
-            st.error(f"spotDL error: {process.stderr}")
-            return None
-            
-        # Parse the output to find the downloaded file path
-        output_lines = process.stdout.split('\n')
-        downloaded_files = []
-        
-        for line in output_lines:
-            if "Downloaded" in line and ".mp3" in line:
-                # Extract the file path - this pattern may need adjustment based on spotdl's output format
-                file_path = line.split("Downloaded")[1].strip()
-                if os.path.exists(file_path):
-                    downloaded_files.append(file_path)
-                    
-        # If we found files, return the first one (or you could return all)
-        if downloaded_files:
-            return downloaded_files[0]
-            
-        # If we couldn't find the file in the output, search the directory
-        # This is a fallback in case the output parsing fails
-        for file in os.listdir(save_path):
-            if file.endswith('.mp3') and os.path.getmtime(os.path.join(save_path, file)) > os.path.getmtime(tmp_path):
-                return os.path.join(save_path, file)
-                
-        return None
-        
-    except Exception as e:
-        st.error(f"Error downloading from Spotify: {e}")
-        return None
-        
-    finally:
-        # Clean up the temporary file
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+# ---------------------------------------------------------------------------------------------
 
-def get_song_info_from_spotify(spotify_url):
-    """Get song information from a Spotify URL without downloading"""
-    
-    if not install_spotdl_if_needed():
-        return None, None
-        
-    try:
-        # Run spotdl with the Spotify URL in search mode
-        process = subprocess.run(
-            ["spotdl", "query", spotify_url],
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        
-        if process.returncode != 0:
-            st.error(f"spotDL error: {process.stderr}")
-            return None, None
-            
-        # Parse the output to find song info
-        output = process.stdout
-        
-        # Extract title and artist - this pattern needs adjustment based on spotdl's output
-        title = None
-        artist = None
-        
-        for line in output.split('\n'):
-            if "Title:" in line:
-                title = line.split("Title:")[1].strip()
-            if "Artist:" in line:
-                artist = line.split("Artist:")[1].strip()
-                
-        return title, artist
-        
-    except Exception as e:
-        st.error(f"Error getting song info: {e}")
-        return None, None
-
-# Audio processing functions
 def load_and_process_audio(file_path, sr=22050, duration=None):
     # Load the audio file
     y, sr = librosa.load(file_path, sr=sr, mono=True, duration=duration)
@@ -228,67 +57,132 @@ def load_and_process_audio(file_path, sr=22050, duration=None):
     spectrogram = librosa.amplitude_to_db(S, ref=np.max)
     freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
     times = librosa.times_like(S, sr=sr, hop_length=hop_length)
-    
+
     return spectrogram, freqs, times
 
-def create_constellation_map(spectrogram, freqs, times, threshold=75):
-    # Find peaks in the spectrogram
-    struct = generate_binary_structure(2, 1)
-    neighborhood = iterate_structure(struct, 20)  # Larger neighborhood for better peak isolation
-    
-    # Apply maximum filter to find local maxima
-    local_max = maximum_filter(spectrogram, footprint=neighborhood) == spectrogram
-    
-    # Apply threshold to remove background noise
-    background = (spectrogram < threshold)
-    
-    # Combine local maxima and threshold to find peaks
-    peaks = local_max & ~background
-    
-    # Extract peak coordinates
-    peak_coords = np.where(peaks)
-    peak_values = spectrogram[peak_coords]
-    
-    # Create constellation map as (time, frequency, amplitude) tuples
-    constellation = []
-    for i in range(len(peak_coords[0])):
-        freq_idx = peak_coords[0][i]
-        time_idx = peak_coords[1][i]
-        constellation.append((times[time_idx], freqs[freq_idx], peak_values[i]))
-    
-    return constellation
 
-def generate_hashes(constellation, fan_out=15, time_window=0.5):
-    # Sort constellation points by time
-    constellation.sort(key=lambda x: x[0])
-    
-    # Generate hashes
-    hashes = []
-    for i in range(len(constellation)):
-        # Anchor point
-        anchor_time, anchor_freq, _ = constellation[i]
-        
-        # Look at the next fan_out points within the time window
+def find_peaks(spectrogram, freqs, times, amp_min=-40, neighbourhood_size=2):
+
+    # Threshold the spectrogram
+    threshold_spectrogram = np.copy(spectrogram)
+    threshold_spectrogram[threshold_spectrogram < amp_min] = amp_min
+
+    # Define local neighborhood structure
+    struct = generate_binary_structure(2, 1)
+    neighbourhood = iterate_structure(struct, neighbourhood_size)
+
+    # Find local maxima
+    local_max = maximum_filter(threshold_spectrogram, footprint=neighbourhood) == threshold_spectrogram
+
+    # Apply erosion to remove points on the edges
+    background = (threshold_spectrogram == amp_min)
+    eroded_background = binary_erosion(background, structure=neighbourhood, border_value=1)
+    detected_peaks = local_max & ~eroded_background
+
+    # Extract peak positions
+    peak_positions = np.argwhere(detected_peaks)
+
+    # Get frequency and time indices
+    freq_indices = peak_positions[:, 0]
+    time_indices = peak_positions[:, 1]
+
+    # Convert indices to values
+    peak_freqs = [freqs[i] for i in freq_indices]
+    peak_times = [times[i] for i in time_indices]
+
+    # Create peaks list sorted by time
+    peaks = list(zip(peak_freqs, peak_times))
+    peaks.sort(key=lambda x: x[1])
+
+    return peaks
+
+
+def create_fingerprints(peaks, fan_out=15, time_delta_max=200):
+
+    fingerprints = []
+
+    for i, anchor in enumerate(peaks):
         for j in range(1, fan_out + 1):
-            if i + j < len(constellation):
-                target_time, target_freq, _ = constellation[i + j]
-                
-                # Check if the target is within the time window
-                if target_time - anchor_time <= time_window:
-                    # Create a hash: (anchor_freq, target_freq, delta_time)
-                    freq_delta = target_freq - anchor_freq
-                    time_delta = target_time - anchor_time
-                    
-                    # Create a hash string
-                    hash_str = f"{int(anchor_freq)}|{int(target_freq)}|{time_delta:.6f}"
-                    
-                    # Store the hash with the anchor time
-                    hashes.append((hash_str, anchor_time))
-                else:
-                    # If we've gone beyond the time window, break
-                    break
-    
-    return hashes
+            if i + j < len(peaks):
+                point = peaks[i + j]
+                freq1 = anchor[0]
+                freq2 = point[0]
+                t1 = anchor[1]
+                t2 = point[1]
+                time_delta = t2 - t1
+
+                if 0 < time_delta <= time_delta_max:
+                    hash_value = hash((freq1, freq2, time_delta))
+                    fingerprints.append((hash_value, t1))
+
+    return fingerprints
+
+
+def add_song_to_database(database, song_mapping, song_id, song_name, audio_path, fingerprints):
+
+    # Store song metadata
+    song_mapping[song_id] = {"path": audio_path, "name": song_name}
+
+    # Add fingerprints to the database
+    for hash_value, time_offset in fingerprints:
+        if hash_value not in database:
+            database[hash_value] = []
+        database[hash_value].append((song_id, time_offset))
+
+    return database, song_mapping
+
+
+def match_sample(database, song_mapping, fingerprints_sample, threshold=0.0001):
+
+    # Match against the database
+    matches = defaultdict(Counter)
+    matched_count = 0
+
+    for hash_value, sample_time in fingerprints_sample:
+        if hash_value in database:
+            matched_count += 1
+            for song_id, song_time in database[hash_value]:
+                # The time offset is how far the sample is from the start of the song
+                time_offset = song_time - sample_time
+                matches[song_id][time_offset] += 1
+
+    # Find the song with the most consistent time offsets
+    results = []
+    for song_id, time_offsets in matches.items():
+        # Skip if no matches
+        if not time_offsets:
+            continue
+
+        # Find the most common time offset
+        best_offset, best_count = time_offsets.most_common(1)[0]
+
+        # Calculate a score
+        score = best_count / len(fingerprints_sample) if fingerprints_sample else 0
+
+        # Add to results if score is above threshold
+        if score >= threshold:
+            results.append((song_id, score, best_offset))
+
+    # Sort results by score
+    results.sort(key=lambda x: x[1], reverse=True)
+
+    return results, matched_count
+
+
+def visualize_spectrogram_with_peaks(spectrogram, sr=22050, peaks=None, title="Spectrogram"):
+
+    plt.figure(figsize=(12, 6))
+    librosa.display.specshow(spectrogram, sr=sr, x_axis="time", y_axis="log")
+    plt.colorbar(format='%2.0f dB')
+
+    if peaks:
+        peak_freqs = [p[0] for p in peaks]
+        peak_times = [p[1] for p in peaks]
+        plt.scatter(peak_times, peak_freqs, color='blue', s=10)
+
+    plt.title(title)
+    plt.tight_layout()
+    plt.show()
 
 class AudioFingerprinter:
     def __init__(self, database_path=None, mapping_path=None):
@@ -305,31 +199,31 @@ class AudioFingerprinter:
                 print(f"Loaded database with {len(self.database)} unique hashes and {len(self.song_mapping)} songs")
             except Exception as e:
                 print(f"Error loading database: {e}")
-    
-    def add_song(self, file_path, song_name):
-        # Generate a unique ID for the song
-        song_id = len(self.song_mapping) + 1
-        
-        # Add to song mapping
-        self.song_mapping[song_id] = song_name
-        
-        # Process the audio
-        spectrogram, freqs, times = load_and_process_audio(file_path)
-        
-        # Create constellation map
-        constellation = create_constellation_map(spectrogram, freqs, times)
-        
-        # Generate hashes
-        hashes = generate_hashes(constellation)
-        
-        # Add hashes to database
-        for hash_str, offset in hashes:
-            if hash_str not in self.database:
-                self.database[hash_str] = []
-            self.database[hash_str].append((song_id, offset))
-        
+
+    def add_song(self, song_path, song_name=None):
+
+        if song_name is None:
+            song_name = os.path.basename(song_path)
+
+        # Generate a new song ID
+        song_id = max(self.song_mapping.keys(), default=0) + 1
+
+        # Process the song
+        spectrogram, freqs, times = load_and_process_audio(song_path)
+        ## visualize_spectrogram_with_peaks(spectrogram)
+        peaks = find_peaks(spectrogram, freqs, times)
+        fingerprints = create_fingerprints(peaks)
+
+        # Add to database
+        self.database, self.song_mapping = add_song_to_database(
+            self.database, self.song_mapping, song_id, song_name, song_path, fingerprints
+        )
+
+        print(f"Added song {song_id}: {song_name} to the database")
+        print(f"Database now contains {len(self.database)} unique hash values")
+
         return song_id
-    
+
     def add_songs_from_directory(self, directory_path):
         added_songs = []
         
@@ -350,74 +244,46 @@ class AudioFingerprinter:
                 print(f"Error adding {audio_file}: {e}")
                 
         return added_songs
-    
-    def identify_sample(self, file_path, duration=10):
-        # Process the sample audio
-        spectrogram, freqs, times = load_and_process_audio(file_path, duration=duration)
-        
-        # Create constellation map
-        constellation = create_constellation_map(spectrogram, freqs, times)
-        
-        # Generate hashes
-        sample_hashes = generate_hashes(constellation)
-        
-        # Match against database
-        matches = defaultdict(list)
-        
-        for hash_str, sample_offset in sample_hashes:
-            if hash_str in self.database:
-                for song_id, song_offset in self.database[hash_str]:
-                    # Calculate the time difference
-                    time_diff = song_offset - sample_offset
-                    matches[song_id].append(time_diff)
-        
-        # Count the number of matching hashes for each song
-        match_counts = {song_id: len(time_diffs) for song_id, time_diffs in matches.items()}
-        
-        # Find the song with the most matches
-        if not match_counts:
-            return []
-        
-        # Sort songs by number of matches (descending)
-        sorted_matches = sorted(match_counts.items(), key=lambda x: x[1], reverse=True)
-        
-        # Return the top matches with confidence scores
-        results = []
-        total_matches = sum(count for _, count in sorted_matches)
-        
-        for song_id, count in sorted_matches[:5]:  # Return top 5 matches
-            confidence = count / total_matches if total_matches > 0 else 0
-            song_name = self.song_mapping.get(song_id, f"Unknown Song ({song_id})")
-            results.append({
-                "song_id": song_id,
-                "song_name": song_name,
-                "matches": count,
-                "confidence": confidence
-            })
+
+    def identify_sample(self, sample_path, threshold=0.0001):
+
+        spectrogram, freqs, times = load_and_process_audio(sample_path)
+        peaks = find_peaks(spectrogram, freqs, times)
+        fingerprints = create_fingerprints(peaks)
+
+        # Match against the database
+        results, matched_count = match_sample(self.database, self.song_mapping, fingerprints, threshold)
+
+        print(f"Matched {matched_count} fingerprints from the sample against the database")
+
+        # Print the results
+        if results:
+            print("Matches found are:")
+            for song_id, score, offset in results:
+                song_name = self.song_mapping[song_id]["name"]
+                print(f"Song: {song_name}, Score: {score:.4f}, Time Offset: {offset:.4f}")
+        else:
+            print("No matches found")
+        for song_id, score, offset in results:
+                song_name = self.song_mapping[song_id]["name"]
+                results.sort(key=lambda x: x[1])
+                print(f"The Song is: {song_name}, Score: {score:.4f}, Time Offset: {offset:.4f}")
+                st.text("The song is: ")
+                st.text(song_name)
+                break
         
         return results
-    
+
     def save_database(self, database_path="fingerprint_database.pkl", mapping_path="song_mapping.pkl"):
-        # Save the database to disk
+
         with open(database_path, "wb") as f:
             pickle.dump(self.database, f)
-        
-        # Save the song mapping to disk
+
         with open(mapping_path, "wb") as f:
             pickle.dump(self.song_mapping, f)
-        
-        print(f"Saved database with {len(self.database)} unique hashes and {len(self.song_mapping)} songs")
 
-# Function to clear all files in the downloads directory
-def clear_downloads_directory():
-    try:
-        for filename in os.listdir(DOWNLOADS_DIR):
-            file_path = os.path.join(DOWNLOADS_DIR, filename)
-            if os.path.isfile(file_path) or os.path.islink(file_path):
-                os.remove(file_path)
-        st.success("All files in downloads directory have been removed.")
-    except Exception as e:
-        st.error(f"Error clearing downloads directory: {e}")
+        print(f"Database saved to {database_path} and {mapping_path}")
+
 
 # ---------------------------------------------------------------------------------------------
 
@@ -438,70 +304,26 @@ if st.button("Load existing songs"):
     else:
         st.warning(f"Directory {DOWNLOADS_DIR} does not exist yet.")
 
-# Clear downloads directory button
-if st.button("Clear Downloads Directory"):
-    clear_downloads_directory()
-
-# Create tabs for different download methods
-tab1, tab2, tab3, tab4 = st.tabs(["YouTube Download", "Spotify Download", "Record Audio", "Upload Audio"])
-
 # YouTube URL form
-with tab1:
-    st.subheader("Download from YouTube")
-    with st.form("get_link"):
-        video_link = st.text_input("Enter the YouTube URL of the song:")
-        submitted = st.form_submit_button("Upload Song")
-        if submitted and video_link:
-            with st.spinner("Downloading and processing audio..."):
-                file_path = download_best_audio_as_mp3(video_link, DOWNLOADS_DIR)
-                
-                if file_path and os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-                    video_title = os.path.basename(file_path).replace('.mp3', '')
-                    fingerprinter.add_song(file_path, video_title)
-                    fingerprinter.save_database()
-                    st.success(f"Song '{video_title}' uploaded and fingerprinted.")
-                else:
-                    st.error("Failed to download the song due to YouTube restrictions.")
-                    st.info("Try a different YouTube URL or check if the video is available in your region.")
-
-# Spotify download form
-with tab2:
-    st.subheader("Download from Spotify")
-    with st.form("spotify_download_form"):
-        spotify_url = st.text_input("Enter Spotify URL (song, album, or playlist):")
-        submitted = st.form_submit_button("Download")
+with st.form("get_link"):
+    video_link = st.text_input("Enter the YouTube URL of the song:")
+    submitted = st.form_submit_button("Upload Song")
+    if submitted and video_link:
+        video_title = download_mp3(video_link)
+        video_file_path = os.path.join(DOWNLOADS_DIR, f"{video_title}.mp3")
         
-        if submitted and spotify_url:
-            if "spotify.com" not in spotify_url:
-                st.error("Please enter a valid Spotify URL")
-            else:
-                with st.spinner("Downloading from Spotify..."):
-                    # Get song info first
-                    title, artist = get_song_info_from_spotify(spotify_url)
-                    
-                    if title and artist:
-                        st.info(f"Found: {title} by {artist}")
-                        
-                    # Download the song
-                    file_path = download_from_spotify(spotify_url, DOWNLOADS_DIR)
-                    
-                    if file_path and os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-                        song_name = os.path.basename(file_path).replace('.mp3', '')
-                        
-                        # Add to your fingerprinter database
-                        fingerprinter.add_song(file_path, song_name)
-                        fingerprinter.save_database()
-                        
-                        st.success(f"Song '{song_name}' downloaded and fingerprinted.")
-                    else:
-                        st.error("Failed to download the song.")
-                        st.info("Check if the Spotify URL is valid and accessible.")
+        if os.path.exists(video_file_path):
+            fingerprinter.add_song(video_file_path, video_title)
+            fingerprinter.save_database()
+            st.success(f"Song '{video_title}' uploaded and fingerprinted.")
+        else:
+            st.error("MP3 file not found after download.")
 
 # Record audio form
-with tab3:
-    st.subheader("Record Audio Sample")
+with st.form("get_sample_from_microphone"):
     sample_recorded_audio = st.audio_input(label="Record Audio")
-    if sample_recorded_audio:
+    submitted = st.form_submit_button("Submit")
+    if submitted and sample_recorded_audio:
         # Save recorded audio to a temporary file
         temp_wav = os.path.join(tempfile.gettempdir(), "recorded_audio.wav")
         temp_mp3 = os.path.join(tempfile.gettempdir(), "sample_recorded_audio.mp3")
@@ -514,38 +336,32 @@ with tab3:
         sound.export(temp_mp3, format="mp3")
         
         # Identify the song
-        with st.spinner("Identifying song..."):
-            results = fingerprinter.identify_sample(temp_mp3)
-            
-            if results:
-                st.success("Match found!")
-                for i, result in enumerate(results, 1):
-                    st.write(f"{i}. {result['song_name']} (Confidence: {result['confidence']:.2%})")
-            else:
-                st.warning("No matches found in the database.")
+        results = fingerprinter.identify_sample(temp_mp3)
+        
+        if results:
+            st.success("Match found!")
+        else:
+            st.warning("No matches found in the database.")
 
 # Upload audio file form
-with tab4:
-    st.subheader("Upload Audio Sample")
+with st.form("get_sample_from_file"):
     sample_uploaded_audio = st.file_uploader(label="Upload Audio")
-    if sample_uploaded_audio:
+    submitted = st.form_submit_button("Submit")
+    if submitted and sample_uploaded_audio:
         # Save uploaded audio to a temporary file
         temp_file = os.path.join(tempfile.gettempdir(), "uploaded_audio.mp3")
         with open(temp_file, "wb") as f:
             f.write(sample_uploaded_audio.getbuffer())
         
         # Identify the song
-        with st.spinner("Identifying song..."):
-            results = fingerprinter.identify_sample(temp_file)
-            
-            if results:
-                st.success("Match found!")
-                for i, result in enumerate(results, 1):
-                    st.write(f"{i}. {result['song_name']} (Confidence: {result['confidence']:.2%})")
-            else:
-                st.warning("No matches found in the database.")
+        results = fingerprinter.identify_sample(temp_file)
+        
+        if results:
+            st.success("Match found!")
+        else:
+            st.warning("No matches found in the database.")
 
-# Display songs in database
+
 st.header("Songs in Database")
 
 if st.button("Show all songs in database"):
