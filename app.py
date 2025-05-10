@@ -254,8 +254,6 @@ def add_songs_from_directory(self, directory_path):
         return added_songs
 
     def identify_sample(self, sample_path, threshold=0.0001):
-
-        # Process the sample
         spectrogram, freqs, times = load_and_process_audio(sample_path)
         peaks = find_peaks(spectrogram, freqs, times)
         fingerprints = create_fingerprints(peaks)
