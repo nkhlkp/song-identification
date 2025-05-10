@@ -377,3 +377,24 @@ with st.form("get_sample_from_file"):
             st.success("Match found!")
         else:
             st.warning("No matches found in the database.")
+
+
+st.header("Songs in Database")
+
+if st.button("Show all songs in database"):
+    # Check if database exists and has songs
+    if hasattr(fingerprinter, 'song_mapping') and fingerprinter.song_mapping:
+        # Create a list of songs from your song_mapping dictionary
+        songs_list = []
+        for song_id, song_name in fingerprinter.song_mapping.items():
+            songs_list.append({"ID": song_id, "Song Name": song_name})
+        
+        # Display as a dataframe
+        import pandas as pd
+        songs_df = pd.DataFrame(songs_list)
+        st.dataframe(songs_df, use_container_width=True)
+        
+        # Also show the total count
+        st.write(f"Total songs in database: {len(fingerprinter.song_mapping)}")
+    else:
+        st.info("No songs found in the database. Try adding some songs first!")
