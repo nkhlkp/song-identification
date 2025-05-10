@@ -25,11 +25,6 @@ FFMPEG_DIR = "/usr/bin/ffmpeg"
 
 # ---------------------------------------------------------------------------------------------
 
-
-def sanitize_filename(filename):
-    # Remove characters not allowed in Windows filenames
-    return re.sub(r'[\\/*?:"<>|]', "", filename)
-
 def download_best_audio_as_mp3(video_url, save_path):
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -362,7 +357,6 @@ with st.form("get_sample_from_file"):
 
 if (video_link):
     mp3_path, video_title = download_best_audio_as_mp3(video_link, DOWNLOAD_DIR)
-    video_title = sanitize_filename(get_video_title(video_link, DOWNLOAD_DIR))
     video_file_path = os.path.join(DOWNLOAD_DIR, f"{video_title}.mp3")
 
     st.write(f"Processing file: {video_file_path}")
