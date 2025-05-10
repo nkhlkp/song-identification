@@ -6,3 +6,4 @@ scipy
 matplotlib
 soundfile
 pydub
+ffmpeg
