@@ -49,20 +49,6 @@ def download_best_audio_as_mp3(video_url, save_path):
         mp3_filename = os.path.splitext(filename)[0] + ".mp3"
         return mp3_filename, title
 
-def get_video_title(video_url, save_path=DOWNLOAD_DIR):
-    ydl_opts = {
-    'outtmpl': save_path + '/%(title)s.%(ext)s',  # Save path and file name
-    'postprocessors': [{  # Post-process to convert to MP3
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',  # Convert to mp3
-        'preferredquality': '0',  # '0' means best quality, auto-determined by source
-    }],
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info_dict = ydl.extract_info(video_url, download=False)
-        video_title = info_dict.get('title', None)
-
-    return video_title
 # ---------------------------------------------------------------------------------------------
 
 def load_and_process_audio(file_path, sr=22050, duration=None):
@@ -355,7 +341,7 @@ with st.form("get_link"):
     else:
         st.write(f"Please paste link before submitting.")
 
-with st.form("get_audget_sample_from_microphone"):
+with st.form("get_sample_from_microphone"):
     sample_recorded_audio = st.audio_input(label="Record Audio")
     submitted = st.form_submit_button("Submit")
 
