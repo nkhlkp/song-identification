@@ -25,16 +25,58 @@ os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
 
 def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
+    # First attempt: Standard download
     ydl_opts = {
+        'format': 'bestaudio/best',
         'outtmpl': os.path.join(save_path, '%(title)s.%(ext)s'),
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '0',
         }],
+        'verbose': True,  # Add verbose output for debugging
+        'no_warnings': False,
+        'ignoreerrors': False,
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([video_url])
+    
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+            video_title = info.get('title', 'unknown_title')
+            sanitized_title = sanitize_filename(video_title)
+            
+            # Try with different format selection
+            ydl_opts['format'] = 'bestaudio'
+            ydl.params = ydl_opts  # Update params
+            ydl.download([video_url])
+            
+            # Check if file exists and has content
+            expected_path = os.path.join(save_path, f"{sanitized_title}.mp3")
+            if os.path.exists(expected_path) and os.path.getsize(expected_path) > 0:
+                return expected_path
+            
+            # If we're here, the first attempt failed
+            st.warning("First download attempt failed. Trying alternative method...")
+            
+            # Second attempt: Use a different format approach
+            ydl_opts['format'] = 'bestaudio[ext=m4a]'
+            ydl.params = ydl_opts
+            ydl.download([video_url])
+            
+            # Check again
+            if os.path.exists(expected_path) and os.path.getsize(expected_path) > 0:
+                return expected_path
+                
+            # Third attempt: Try with a specific format
+            ydl_opts['format'] = '140'  # Common audio format on YouTube
+            ydl.params = ydl_opts
+            ydl.download([video_url])
+            
+            return expected_path
+            
+    except Exception as e:
+        st.error(f"Error downloading: {str(e)}")
+        return None
 
 
 def get_video_title(video_url, save_path=DOWNLOADS_DIR):
