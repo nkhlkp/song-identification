@@ -12,12 +12,32 @@ import sys
 from pydub import AudioSegment
 import re
 import tempfile
+import urllib
+from urllib.parse import urlparse, parse_qs
 
 # Create necessary directories
 DOWNLOADS_DIR = "downloads"
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
 # ---------------------------------------------------------------------------------------------
+
+def clean_youtube_url(url):
+    parsed_url = urlparse(url)
+    if 'youtu.be' in parsed_url.netloc:
+        # Shortened URL format: https://youtu.be/VIDEO_ID
+        video_id = parsed_url.path[1:]
+    elif 'youtube.com' in parsed_url.netloc:
+        # Standard URL format: https://www.youtube.com/watch?v=VIDEO_ID
+        query_params = parse_qs(parsed_url.query)
+        video_id = query_params.get('v', [None])[0]
+    else:
+        return None  # Not a YouTube URL
+
+    if video_id:
+        return f"https://www.youtube.com/watch?v={video_id}"
+    else:
+        return None
+    
 
 def sanitize_filename(filename):
     # Remove characters not allowed in filenames
@@ -278,19 +298,12 @@ class AudioFingerprinter:
                 print(f"The Song is: {song_name}, Score: {score:.4f}, Time Offset: {offset:.4f}")
                 st.text("The song is: ")
                 st.text(song_name)
-
-
                 break
+        
         return results
 
     def save_database(self, database_path="fingerprint_database.pkl", mapping_path="song_mapping.pkl"):
-        """
-        Save the database to disk.
 
-        Parameters:
-        - database_path: Path to save the database
-        - mapping_path: Path to save the mapping
-        """
         with open(database_path, "wb") as f:
             pickle.dump(self.database, f)
 
@@ -322,10 +335,11 @@ if st.button("Load existing songs"):
 # YouTube URL form
 with st.form("get_link"):
     video_link = st.text_input("Enter the YouTube URL of the song:")
+    clean_link = clean_youtube_url(video_link)
     submitted = st.form_submit_button("Upload Song")
-    if submitted and video_link:
-        download_best_audio_as_mp3(video_link, DOWNLOADS_DIR)
-        raw_title = get_video_title(video_link, DOWNLOADS_DIR)
+    if submitted and clean_link:
+        download_best_audio_as_mp3(clean_link, DOWNLOADS_DIR)
+        raw_title = get_video_title(clean_link, DOWNLOADS_DIR)
         video_title = sanitize_filename(raw_title)
         video_file_path = os.path.join(DOWNLOADS_DIR, f"{video_title}.mp3")
         
