@@ -329,6 +329,9 @@ else:
     fingerprinter = AudioFingerprinter()
 
 # Add songs from downloads directory if it exists
+
+st.header("Load existing songs in the Database")
+
 if st.button("Load existing songs"):
     if os.path.exists(DOWNLOADS_DIR):
         fingerprinter.add_songs_from_directory(DOWNLOADS_DIR)
@@ -336,6 +339,8 @@ if st.button("Load existing songs"):
         st.success("Songs loaded successfully!")
     else:
         st.warning(f"Directory {DOWNLOADS_DIR} does not exist yet.")
+
+st.header("Add your favourite song to the Database")
 
 # YouTube URL form
 with st.form("get_link"):
@@ -353,6 +358,9 @@ with st.form("get_link"):
             st.success(f"Song '{video_title}' uploaded and fingerprinted.")
         else:
             st.error("MP3 file not found after download.")
+
+st.header("Identify the Song!")
+st.write("You can either record a short snippet or upload a file of the same.")
 
 # Record audio form
 with st.form("get_sample_from_microphone"):
