@@ -42,6 +42,9 @@ def clean_youtube_url(url):
 def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
     ydl_opts = {
         'format': 'bv[protocol=m3u8_native]+ba[protocol=m3u8_native]',
+        'force_ipv4': True,  # Force IPv4
+        # Or 'force_ipv6': True for IPv6
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         'extractor_args': {
         'youtube': {
             'player_client': ['ios']}},
