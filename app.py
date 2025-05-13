@@ -44,7 +44,7 @@ def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
         'format': 'bv[protocol=m3u8_native]+ba[protocol=m3u8_native]',
         'extractor_args': {
         'youtube': {
-            'player_client': ['ios'],
+            'player_client': ['ios']}},
         'format': 'bestaudio/best',
         'outtmpl': os.path.join(save_path, '%(title)s.%(ext)s'),
         'postprocessors': [{
