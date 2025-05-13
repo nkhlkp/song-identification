@@ -330,7 +330,7 @@ else:
 
 # Add songs from downloads directory if it exists
 
-st.header("Load existing songs in the Database")
+st.subheader("Load existing songs in the Database")
 
 if st.button("Load existing songs"):
     if os.path.exists(DOWNLOADS_DIR):
@@ -359,7 +359,7 @@ with st.form("get_link"):
         else:
             st.error("MP3 file not found after download.")
 
-st.header("Identify the Song!")
+st.subheader("Identify the Song!")
 st.write("You can either record a short snippet or upload a file of the same.")
 
 # Record audio form
@@ -405,7 +405,7 @@ with st.form("get_sample_from_file"):
             st.warning("No matches found in the database.")
 
 
-st.header("Songs in Database")
+st.subheader("Songs in Database")
 
 if st.button("Show all songs in database"):
     # Check if database exists and has songs
