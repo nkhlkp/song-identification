@@ -41,7 +41,6 @@ def clean_youtube_url(url):
 
 def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
     ydl_opts = {
-        'force_ipv6': True,
         'format': 'bestaudio/best',
         'outtmpl': os.path.join(save_path, '%(title)s.%(ext)s'),
         'postprocessors': [{
