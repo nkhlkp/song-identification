@@ -41,6 +41,7 @@ def clean_youtube_url(url):
 
 def download_best_audio_as_mp3(video_url, save_path=DOWNLOADS_DIR):
     ydl_opts = {
+        'force_ipv4': True,
         'geo_bypass': True,
         'geo_bypass_country': 'US',
         'format': 'bestaudio/best',
